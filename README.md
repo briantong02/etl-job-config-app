@@ -2,8 +2,9 @@
 
 A Microsoft Fabric–authenticated web form for registering ETL job configurations.
 Data engineers fill in the source/target objects and load strategy for a new job,
-submit, and the config lands in the `EtlJobConfigIntake` table for the ETL
-framework to pick up — no hand-editing config tables, no SQL access required.
+submit, and the config lands in the `EtlJobConfigIntake` table, where a
+scheduled pipeline picks it up — no hand-editing config tables, no SQL access
+required.
 
 Built as a React + Vite single-page app on [Rayfin](https://www.npmjs.com/package/@microsoft/rayfin-core),
 deployed to Fabric with Entra sign-in and a managed SQL backend.
@@ -44,13 +45,37 @@ Each submission writes one row to `EtlJobConfigIntake`:
 | Data Load | `incremental` | Full or incremental |
 | Watermark Column | `SinkModifiedOn` | Drives incremental loads |
 
-Rows are written with `processed: false` and a `submittedAt` timestamp, so a
-downstream process can pick up new configs and mark them done.
+Rows are written with `processed: false` and a `submittedAt` timestamp.
 
-> **Note:** the form's subtitle says it triggers the `pl_insert_etl_job_config`
-> pipeline. It does not — submission only writes the intake row. The Fabric
-> token plumbing for a pipeline call exists (`IAuthService.getFabricToken`) but
-> is not wired up yet.
+## How it runs today
+
+The app's only job is the table write — it does not call the ETL pipeline
+directly. `pl_insert_etl_job_config` runs **on a schedule**, picks up rows
+where `processed = false`, applies them, and marks them processed. A config
+submitted through the form therefore takes effect on the pipeline's next
+scheduled run rather than immediately.
+
+Two things follow from that:
+
+- **Submissions are durable.** If the pipeline is down or mid-run, configs
+  simply queue in the intake table until the next run picks them up.
+- **Latency is the schedule interval.** Set it on the pipeline itself in
+  Fabric (Data Factory → `pl_insert_etl_job_config` → Schedule), and match the
+  interval to how quickly new job configs need to go live.
+
+## Future work
+
+**Direct pipeline trigger.** Submitting the form would start
+`pl_insert_etl_job_config` straight away instead of waiting for the next
+scheduled run. Most of the plumbing already exists:
+`IAuthService.getFabricToken()` returns an Entra access token scoped for
+`api.fabric.microsoft.com`, which is what the Fabric pipeline-run REST call
+needs. What's missing is the call itself plus the UI states around it
+(in-flight, failed-to-trigger, run ID).
+
+Worth knowing: `MockAuthService.getFabricToken()` returns `null` by design, so
+a direct trigger can only work against a real Fabric deployment — not the
+local dev backend. The scheduled path above would stay as the fallback.
 
 ## Getting started
 
