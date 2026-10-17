@@ -23,9 +23,6 @@ coverage
 *.local
 .env
 
-# Local Claude Code settings (`*.local` doesn't match a `.local.json` suffix)
-.claude/settings.local.json
-
 # Rayfin — auto-generated or secret-bearing files
 # `rayfin/.env*` covers .env, .env.bak (emitted by env-file v2 migration with
 # secrets), and any future .env-family files Rayfin's runtime adds.
@@ -35,6 +32,7 @@ rayfin/.temp/
 
 # Editor / OS
 .idea
+.claude
 .DS_Store
 *.suo
 *.ntvs*
